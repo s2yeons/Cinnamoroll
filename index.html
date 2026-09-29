@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cinnamoroll — 구름 위의 하얀 강아지</title>
+    <meta name="description" content="하늘에서 날아온 하얀 강아지, 시나모롤을 소개하는 3D 인터랙티브 팬 페이지." />
+    <meta name="theme-color" content="#8ecbff" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cellipse cx='32' cy='30' rx='22' ry='16' fill='white' stroke='%236ea4de' stroke-width='4'/%3E%3Cellipse cx='23' cy='31' rx='2.5' ry='4' fill='%235f9de2'/%3E%3Cellipse cx='41' cy='31' rx='2.5' ry='4' fill='%235f9de2'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Jua&family=Gowun+Dodum&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="sky" id="sky"></div>
+    <canvas id="gl" aria-hidden="true"></canvas>
+    <div class="grain" aria-hidden="true"></div>
+
+    <!-- ——— loader ——— -->
+    <div class="loader" id="loader">
+      <div class="loader-panel top"></div>
+      <div class="loader-panel bottom"></div>
+      <div class="loader-inner">
+        <svg class="loader-roll" viewBox="-60 -60 120 120" aria-hidden="true"><path id="loader-spiral" /></svg>
+        <p class="loader-label">구름 반죽 부풀리는 중 <span id="loader-pct">0</span>%</p>
+      </div>
+    </div>
+
+    <!-- ——— cursor ——— -->
+    <div class="cursor" aria-hidden="true"><div class="cursor-dot"></div><div class="cursor-ring"></div></div>
+    <div class="fx-layer" id="fx" aria-hidden="true"></div>
+
+    <!-- ——— chrome ——— -->
+    <header class="nav">
+      <a class="nav-logo" href="#top" data-hover data-scroll-to="0">
+        <span class="nav-logo-mark"></span>cinnamoroll
+      </a>
+      <nav class="nav-links">
+        <a href="#about" data-hover data-scroll-to="about">프로필</a>
+        <a href="#fly" data-hover data-scroll-to="fly">비행</a>
+        <a href="#cafe" data-hover data-scroll-to="cafe">카페</a>
+        <a href="#friends" data-hover data-scroll-to="friends">친구들</a>
+        <a href="#night" data-hover data-scroll-to="night">밤하늘</a>
+      </nav>
+    </header>
+    <div class="progress"><span id="progress-bar"></span></div>
+    <ol class="dots" id="dots"></ol>
+
+    <main>
+      <!-- ——— HERO ——— -->
+      <section class="hero" id="top" data-stage="hero">
+        <div class="hero-meta front">
+          <span>SANRIO CHARACTER</span>
+          <span>SINCE 2001 · 03 · 06</span>
+        </div>
+        <h1 class="hero-title behind" id="hero-title" aria-label="Cinnamoroll">Cinnamoroll</h1>
+        <div class="hero-bottom front">
+          <p class="hero-sub" id="hero-sub">구름 위에서 날아온 하얀 강아지,<br /><strong>시나모롤</strong>을 소개할게요.</p>
+          <button class="pill" data-hover data-scroll-to="about">
+            <span>스크롤해서 함께 날기</span>
+            <svg viewBox="0 0 24 24"><path d="M12 4v16m0 0-6-6m6 6 6-6" /></svg>
+          </button>
+        </div>
+        <div class="hero-hint front" id="hero-hint">
+          <svg viewBox="0 0 120 60"><path d="M4 50 C 30 55, 70 50, 110 12" /><path d="M96 10 L112 10 L108 26" /></svg>
+          <span>눌러 보세요!</span>
+        </div>
+      </section>
+
+      <div class="marquee front" aria-hidden="true">
+        <div class="marquee-row" data-dir="1">
+          <span>Fluffy ✦ Cloud Puppy ✦ Big Ears ✦ Cinnamon Tail ✦ Café Cinnamon ✦ Blue Eyes ✦&nbsp;</span>
+          <span>Fluffy ✦ Cloud Puppy ✦ Big Ears ✦ Cinnamon Tail ✦ Café Cinnamon ✦ Blue Eyes ✦&nbsp;</span>
+        </div>
+        <div class="marquee-row alt" data-dir="-1">
+          <span>폭신폭신 ☁ 펄럭펄럭 ☁ 동글동글 꼬리 ☁ 수줍은 미소 ☁ 하늘 산책 ☁&nbsp;</span>
+          <span>폭신폭신 ☁ 펄럭펄럭 ☁ 동글동글 꼬리 ☁ 수줍은 미소 ☁ 하늘 산책 ☁&nbsp;</span>
+        </div>
+      </div>
+
+      <!-- ——— ABOUT ——— -->
+      <section class="about" id="about" data-stage="about">
+        <div class="col front">
+          <p class="eyebrow reveal">01 — PROFILE</p>
+          <h2 class="title reveal">하늘에서 둥실,<br />내려온 <em>하얀 강아지</em></h2>
+          <p class="lead reveal">
+            먼 하늘 구름 위에서 태어난 하얀 아기 강아지. 어느 날 하늘을 날아 내려와 <b>카페 시나몬</b> 테라스에서
+            쿨쿨 낮잠을 자다가 카페 주인 언니에게 발견되었어요. 꼬리가 시나몬롤처럼 동글동글 말려 있어서, 이름은
+            <b>‘시나몬’</b>이 되었답니다.
+          </p>
+          <div class="stats">
+            <div class="stat glass reveal" data-hover>
+              <b data-count="2001">0</b><span>데뷔한 해</span>
+            </div>
+            <div class="stat glass reveal" data-hover>
+              <b data-count="306" data-format="date">0</b><span>생일 · 3월 6일</span>
+            </div>
+            <div class="stat glass reveal" data-hover>
+              <b data-count="5" data-suffix="연속">0</b><span>산리오 캐릭터 대상 1위<br />(2020–2024)</span>
+            </div>
+          </div>
+          <ul class="chips reveal">
+            <li><i>☁</i>특기 · 큰 귀로 하늘 날기</li>
+            <li><i>✿</i>성격 · 수줍지만 다정해요</li>
+            <li><i>♨</i>최애 · 카페 시나몬의 시나몬롤</li>
+            <li><i>✦</i>눈 · 맑은 하늘색</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ——— FLY ——— -->
+      <section class="fly" id="fly" data-stage="fly" data-hold="0.86">
+        <div class="sticky behind">
+          <div class="fly-words" aria-hidden="true">
+            <span data-speed="1.2">FLAP</span>
+            <span data-speed="-0.9">FLAP</span>
+            <span data-speed="1.5">FLY!</span>
+          </div>
+          <svg class="fly-path" viewBox="0 0 1000 600" preserveAspectRatio="none" aria-hidden="true">
+            <path id="fly-trail" d="M-40 420 C 160 120, 360 120, 500 300 S 840 480, 1040 180" />
+          </svg>
+        </div>
+        <div class="sticky front overlay">
+          <div class="fly-copy">
+            <p class="eyebrow">02 — HOW TO FLY</p>
+            <div class="fly-captions" id="fly-captions">
+              <h2 class="title">큰 귀를 <em>활짝</em> 펴고</h2>
+              <h2 class="title">펄럭, <em>펄럭</em> —</h2>
+              <h2 class="title">구름 사이로 <em>슝</em></h2>
+              <h2 class="title">한 바퀴 <em>빙그르르!</em></h2>
+            </div>
+          </div>
+          <div class="hud glass" aria-hidden="true">
+            <div><small>ALTITUDE</small><b id="hud-alt">0</b><i>m</i></div>
+            <div><small>EAR FLAPS</small><b id="hud-flaps">0</b><i>/s</i></div>
+            <div class="hud-bar"><span id="hud-bar"></span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ——— CAFE ——— -->
+      <section class="cafe" id="cafe" data-stage="cafe">
+        <div class="col front">
+          <p class="eyebrow reveal">03 — CAFÉ CINNAMON</p>
+          <h2 class="title reveal">시나몬롤을 닮은<br /><em>동글동글 꼬리</em></h2>
+          <p class="lead reveal">
+            시나모롤이 사는 곳은 따뜻한 향기가 가득한 카페 시나몬. 테라스 위 햇살에서 낮잠 자는 걸 제일 좋아하고,
+            갓 구운 시나몬롤 냄새가 나면 어디서든 귀를 펄럭이며 날아와요.
+          </p>
+          <div class="menu glass reveal">
+            <p class="menu-head">Today's Menu</p>
+            <ul>
+              <li data-hover><span>시나몬롤</span><i></i><b>♥♥♥</b></li>
+              <li data-hover><span>구름 라떼</span><i></i><b>♥♥</b></li>
+              <li data-hover><span>하늘색 마카롱</span><i></i><b>♥♥</b></li>
+              <li data-hover><span>테라스 낮잠</span><i></i><b>∞</b></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ——— FRIENDS ——— -->
+      <section class="friends" id="friends" data-stage="friends" data-hold="0.8">
+        <div class="sticky front">
+          <div class="friends-head front">
+            <p class="eyebrow">04 — CINNAMON'S FRIENDS</p>
+            <h2 class="title">카페 시나몬의 <em>단짝 친구들</em></h2>
+          </div>
+          <div class="cards front" id="cards">
+            <article class="card glass" data-friend="0" data-hover style="--c: #d9a18f">
+              <h3>모카 <small>Mocha</small></h3>
+              <p>세련된 걸 좋아하는 멋쟁이. 리본이 트레이드마크예요.</p>
+            </article>
+            <article class="card glass" data-friend="1" data-hover style="--c: #d6b476">
+              <h3>쉬폰 <small>Chiffon</small></h3>
+              <p>활발한 운동 소녀. 큰 귀로 공 잡기가 특기!</p>
+            </article>
+            <article class="card glass" data-friend="2" data-hover style="--c: #c9a077">
+              <h3>카푸치노 <small>Cappuccino</small></h3>
+              <p>먹는 게 제일 좋은 느긋한 먹보 친구.</p>
+            </article>
+            <article class="card glass" data-friend="3" data-hover style="--c: #b99b78">
+              <h3>에스프레소 <small>Espresso</small></h3>
+              <p>곱슬곱슬 귀를 가진 예술을 사랑하는 도련님.</p>
+            </article>
+            <article class="card glass" data-friend="4" data-hover style="--c: #7fb0e6">
+              <h3>밀크 <small>Milk</small></h3>
+              <p>공갈젖꼭지를 문 막내. 모두 밀크를 아껴요.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ——— NIGHT ——— -->
+      <section class="night" id="night" data-stage="night">
+        <div class="night-copy front">
+          <p class="eyebrow reveal">05 — GOOD NIGHT</p>
+          <h2 class="title big reveal" id="night-title">잘 자, 시나모롤</h2>
+          <p class="lead reveal">오늘도 구름 이불 위에서 폭신하게. 화면을 눌러 별똥별을 띄워 보세요 ✦</p>
+          <div class="zzz" aria-hidden="true"><span>z</span><span>z</span><span>Z</span></div>
+        </div>
+        <footer class="footer front">
+          <p>Fan-made tribute · Cinnamoroll © Sanrio Co., Ltd. 캐릭터 권리는 산리오에 있습니다.</p>
+          <p>3D model hand-built in three.js · motion by anime.js</p>
+        </footer>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
