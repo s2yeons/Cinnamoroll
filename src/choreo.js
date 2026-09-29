@@ -36,6 +36,11 @@ const raw = {
     happy: 1, friends: 1, cam: [0, 0.3, 9.6],
     skyTop: '#f5bde0', skyBot: '#e9e6ff', ambient: '#fff8fd',
   },
+  play: {
+    pos: [2.7, -0.3, 0], rot: [0, -0.45, 0], scale: 0.82,
+    earL: 1.55, earR: 1.55, flapAmp: 0.22, flapSpeed: 5, happy: 1,
+    skyTop: '#6fbcff', skyBot: '#fff0d4',
+  },
   night: {
     pos: [0, -0.95, 0], rot: [0, 0, 0], scale: 0.85, earL: 0.28, earR: 0.28, flapAmp: 0.01,
     flapSpeed: 1, sleep: 1, look: 0.15, bed: 1, stars: 1, sparkle: 0.3,

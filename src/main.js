@@ -3,6 +3,8 @@ import 'lenis/dist/lenis.css';
 import { animate, createTimeline, stagger, splitText, createDrawable, utils } from 'animejs';
 import { createWorld } from './world.js';
 import { STAGE_NAMES } from './choreo.js';
+import { GAME_TIME } from './game.js';
+import { sfx } from './sfx.js';
 import './style.css';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -20,6 +22,7 @@ window.scrollTo(0, 0);
 // ————————————————————————————————— 3D world
 const world = createWorld($('#gl'));
 const cinna = world.cinna;
+if (import.meta.env.DEV) window.__world = world;
 cinna.react.pop = 0;
 
 // ————————————————————————————————— smooth scroll
@@ -130,6 +133,7 @@ function reactCinna() {
   const r = cinna.react;
   r.happy = 1;
   const kind = ['spin', 'flip', 'boing'][reactN++ % 3];
+  sfx.play('boing');
   const tl = createTimeline({
     onComplete: () => {
       r.spin = 0;
@@ -151,6 +155,7 @@ function jumpFriend(i) {
   const f = world.friends[i];
   if (!f || friendBusy.has(i)) return;
   friendBusy.add(i);
+  sfx.play('pop');
   createTimeline({ onComplete: () => friendBusy.delete(i) })
     .add(f.react, { squash: 0.22, duration: 120, ease: 'outQuad' })
     .add(f.react, { squash: -0.12, jump: 0.9, duration: 360, ease: 'outCubic' })
@@ -160,17 +165,74 @@ function jumpFriend(i) {
 }
 
 let hintGone = false;
+function hideHint() {
+  if (hintGone) return;
+  hintGone = true;
+  animate('#hero-hint', { opacity: 0, y: -20, duration: 500, ease: 'inQuad' });
+}
+
+// ——— grab & fling: drag him around, he springs home ———
+const drag = { on: false, x0: 0, y0: 0, moved: 0, suppressClick: false };
+const playing = () => document.body.classList.contains('is-playing');
+addEventListener('pointerdown', (e) => {
+  if (document.body.classList.contains('is-loading') || playing()) return;
+  if (e.target.closest('a, button, .dots, .card')) return;
+  if (world.pick(e.clientX, e.clientY)?.who !== 'cinna') return;
+  if (!world.startDrag(e.clientX, e.clientY)) return;
+  drag.on = true;
+  drag.x0 = e.clientX;
+  drag.y0 = e.clientY;
+  drag.moved = 0;
+  cinna.react.happy = 1;
+  document.body.classList.add('is-grab');
+  cursor.classList.add('is-grab');
+  lenis.stop();
+});
+addEventListener('pointermove', (e) => {
+  if (!drag.on) return;
+  drag.moved = Math.max(drag.moved, Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0));
+  world.moveDrag(e.clientX, e.clientY);
+});
+addEventListener(
+  'touchmove',
+  (e) => {
+    if (drag.on || playing()) e.preventDefault();
+  },
+  { passive: false },
+);
+function releaseDrag(e) {
+  if (!drag.on) return;
+  drag.on = false;
+  const speed = world.endDrag();
+  document.body.classList.remove('is-grab');
+  cursor.classList.remove('is-grab');
+  lenis.start();
+  if (drag.moved > 8) {
+    drag.suppressClick = true;
+    hideHint();
+    if (speed > 3) {
+      sfx.play('whoosh');
+      setTimeout(() => sfx.play('boing'), 260);
+      burst(e.clientX, e.clientY, Math.min(20, 6 + Math.round(speed)), true);
+    }
+  }
+  setTimeout(() => (cinna.react.happy = 0), 1400);
+}
+addEventListener('pointerup', releaseDrag);
+addEventListener('pointercancel', releaseDrag);
+
 addEventListener('click', (e) => {
-  if (document.body.classList.contains('is-loading')) return;
+  if (document.body.classList.contains('is-loading') || playing()) return;
+  if (drag.suppressClick) {
+    drag.suppressClick = false;
+    return;
+  }
   if (e.target.closest('a, button, .dots')) return;
   const hit = world.pick(e.clientX, e.clientY);
   if (hit?.who === 'cinna') {
     reactCinna();
     burst(e.clientX, e.clientY, 16, true);
-    if (!hintGone) {
-      hintGone = true;
-      animate('#hero-hint', { opacity: 0, y: -20, duration: 500, ease: 'inQuad' });
-    }
+    hideHint();
     return;
   }
   if (hit?.who === 'friend') {
@@ -179,11 +241,25 @@ addEventListener('click', (e) => {
     return;
   }
   burst(e.clientX, e.clientY, 9);
+  sfx.play('pop');
   if (state.i === STAGE_NAMES.indexOf('night')) {
     shootingStar();
     setTimeout(shootingStar, 180);
+    sfx.play('twinkle');
   }
 });
+
+// ——— sound toggle ———
+const soundBtn = $('#sound');
+function syncSound() {
+  soundBtn.classList.toggle('is-on', sfx.enabled);
+  soundBtn.setAttribute('aria-pressed', sfx.enabled);
+}
+soundBtn.addEventListener('click', () => {
+  sfx.toggle();
+  syncSound();
+});
+syncSound();
 
 // ————————————————————————————————— loader
 const spiral = $('#loader-spiral');
@@ -409,6 +485,166 @@ const progressBar = $('#progress-bar');
 // ————————————————————————————————— marquee
 const rows = $$('.marquee-row').map((el) => ({ el, dir: +el.dataset.dir, x: 0 }));
 
+// ————————————————————————————————— mini game: SKY RUN
+const game = world.game;
+const gameUI = $('#game-ui');
+const gScore = $('#g-score');
+const gTime = $('#g-time');
+const gCombo = $('#g-combo');
+const gLives = $('#g-lives');
+const gCount = $('#g-count');
+const gOver = $('#g-over');
+const gTip = $('#g-tip');
+const HEART_ICON = '<svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.8 4.5c2.2 0 3.7 1.3 5.2 3.1 1.5-1.8 3-3.1 5.2-3.1 3.8 0 5.9 3.9 4.4 7.3C19.5 16.4 12 21 12 21z" fill="currentColor" stroke="#6ea4de" stroke-width="1.6"/></svg>';
+let best = 0;
+try {
+  best = +(localStorage.getItem('cinna-best') || 0);
+} catch {}
+$('#best-score').textContent = best;
+let flapTimer = 0;
+
+function renderLives(n) {
+  gLives.innerHTML = Array.from({ length: 3 }, (_, i) => HEART_ICON.replace('<svg', `<svg class="${i < n ? '' : 'lost'}"`)).join('');
+}
+
+function popText(text, at, gold) {
+  const el = document.createElement('div');
+  el.className = 'pop-pts' + (gold ? ' gold' : '');
+  el.textContent = text;
+  document.body.appendChild(el);
+  animate(el, {
+    x: [at.x - 20, at.x - 20 + utils.random(-30, 30)],
+    y: [at.y - 20, at.y - 110],
+    scale: [{ from: 0.2, to: 1.3, duration: 220, ease: 'outBack(3)' }, { to: 0.9, duration: 600 }],
+    opacity: [{ to: 1, duration: 100 }, { to: 0, duration: 400, delay: 450 }],
+    duration: 950,
+    ease: 'outCubic',
+    onComplete: () => el.remove(),
+  });
+}
+
+function countdown() {
+  const steps = ['3', '2', '1', 'GO!'];
+  const tl = createTimeline();
+  steps.forEach((txt, i) => {
+    tl.call(() => {
+      gCount.innerHTML = `<span>${txt}</span>`;
+      sfx.play(i === 3 ? 'gold' : 'pop');
+    }, i * 650);
+    tl.add(gCount, { scale: [2.2, 1], opacity: [0, 1], rotate: [i % 2 ? 12 : -12, 0], duration: 450, ease: 'outElastic(1, .6)' }, i * 650);
+    tl.add(gCount, { scale: 0.6, opacity: 0, duration: 180, ease: 'inQuad' }, i * 650 + 460);
+  });
+  tl.call(() => {
+    game.begin();
+    animate(gTip, { opacity: [0, 1], y: [20, 0], duration: 500, ease: 'outBack(2)' });
+    setTimeout(() => animate(gTip, { opacity: 0, duration: 500 }), 2600);
+  }, steps.length * 650 - 200);
+}
+
+function startGame() {
+  const sec = $('#play');
+  lenis.scrollTo(sec.offsetTop + (sec.offsetHeight - vh) / 2, { immediate: true });
+  lenis.stop();
+  document.body.classList.add('is-playing');
+  gameUI.setAttribute('aria-hidden', 'false');
+  gOver.classList.remove('is-on');
+  utils.set(gOver, { opacity: 0 });
+  game.enter();
+  gScore.textContent = '0';
+  gCombo.textContent = '';
+  renderLives(3);
+  sfx.play('whoosh');
+  countdown();
+}
+
+function leaveGame() {
+  game.exit();
+  document.body.classList.remove('is-playing');
+  gameUI.setAttribute('aria-hidden', 'true');
+  gOver.classList.remove('is-on');
+  gCount.innerHTML = '';
+  lenis.start();
+}
+
+game
+  .on('collect', ({ pts, gold, combo, mult, at }) => {
+    gScore.textContent = game.score;
+    animate(gScore, { scale: [1.35, 1], duration: 500, ease: 'outElastic(1, .5)' });
+    popText(gold ? `+${pts} ✦` : `+${pts}`, at, gold);
+    burst(at.x, at.y, gold ? 16 : 6, gold);
+    sfx.play(gold ? 'gold' : 'chime', combo);
+    if (mult > 1) {
+      gCombo.textContent = `x${mult} COMBO · ${combo}`;
+      animate(gCombo, { scale: [1.4, 1], rotate: [-6, 0], duration: 500, ease: 'outElastic(1, .5)' });
+    }
+  })
+  .on('miss', () => {
+    gCombo.textContent = '';
+  })
+  .on('hit', ({ lives }) => {
+    renderLives(lives);
+    gCombo.textContent = '';
+    sfx.play('hit');
+    const hearts = gLives.querySelectorAll('svg');
+    if (hearts[lives]) animate(hearts[lives], { scale: [1.8, 1], rotate: [-30, 0], duration: 600, ease: 'outElastic(1, .4)' });
+    animate('#g-flash', { opacity: [0.9, 0], duration: 600, ease: 'outQuad' });
+    animate('#gl', { x: [{ to: -14, duration: 50 }, { to: 12, duration: 50 }, { to: -8, duration: 50 }, { to: 5, duration: 50 }, { to: 0, duration: 60 }] });
+  })
+  .on('over', ({ score }) => {
+    const isBest = score > best;
+    if (isBest) {
+      best = score;
+      try {
+        localStorage.setItem('cinna-best', String(best));
+      } catch {}
+      $('#best-score').textContent = best;
+    }
+    const rank =
+      score >= 80 ? '☁ 하늘의 제왕, 시나모롤급!' : score >= 45 ? '✦ 펄럭 마스터' : score >= 20 ? '♨ 카페 단골손님' : '구름 산책 초보';
+    $('#g-rank').textContent = rank;
+    $('#g-best').textContent = isBest ? '🎉 최고 기록 달성!' : `최고 기록 ${best}점`;
+    $('#g-best').classList.toggle('new', isBest);
+    const final = { v: 0 };
+    gOver.classList.add('is-on');
+    createTimeline()
+      .add(gOver, { opacity: [0, 1], scale: [0.6, 1], rotate: [-4, 0], duration: 900, ease: 'outElastic(1, .6)' }, 300)
+      .add(final, { v: score, duration: 1200, ease: 'outExpo', onUpdate: () => ($('#g-final').textContent = Math.round(final.v)) }, 500)
+      .call(() => {
+        sfx.play(isBest ? 'fanfare' : 'pop');
+        if (isBest) {
+          const r = gOver.getBoundingClientRect();
+          for (let k = 0; k < 4; k++) setTimeout(() => burst(r.left + utils.random(0, r.width), r.top + utils.random(0, r.height * 0.5), 14, true), k * 160);
+        }
+      }, 1300);
+  });
+
+$('#game-start').addEventListener('click', startGame);
+$('#g-retry').addEventListener('click', startGame);
+$('#g-leave').addEventListener('click', leaveGame);
+$('#g-exit').addEventListener('click', leaveGame);
+const hold = (on) => {
+  if (game.state !== 'play') return;
+  if (on && !game.holding) sfx.play('flap');
+  game.holding = on;
+};
+gameUI.addEventListener('pointerdown', (e) => {
+  if (e.target.closest('button')) return;
+  hold(true);
+});
+addEventListener('pointerup', () => hold(false));
+addEventListener('pointercancel', () => hold(false));
+addEventListener('keydown', (e) => {
+  if (!playing()) return;
+  if (e.code === 'Space' || e.code === 'ArrowUp') {
+    e.preventDefault();
+    hold(true);
+  }
+  if (e.code === 'Escape') leaveGame();
+});
+addEventListener('keyup', (e) => {
+  if (e.code === 'Space' || e.code === 'ArrowUp') hold(false);
+});
+
 // ————————————————————————————————— main loop
 const root = document.documentElement.style;
 const state = { i: 0, b: 0, flyP: 0, scroll: 0, mouse };
@@ -458,6 +694,16 @@ function loop(now) {
     if (fp > 0 && fp < 1) showCaption(clamp(Math.floor((fp - 0.02) / 0.2), 0, 3));
   }
   hudFlaps.textContent = (pose.flapSpeed / (Math.PI * 2)).toFixed(1);
+
+  // game HUD
+  if (game.state === 'play') {
+    gTime.style.transform = `scaleX(${game.time / GAME_TIME})`;
+    flapTimer -= dt;
+    if (game.holding && flapTimer <= 0) {
+      sfx.play('flap');
+      flapTimer = 0.2;
+    }
+  }
 
   // friends
   toggleCards(friendsP > 0.06 && STAGE_NAMES[cur] === 'friends');

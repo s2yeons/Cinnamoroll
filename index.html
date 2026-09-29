@@ -33,6 +33,32 @@
     <div class="cursor" aria-hidden="true"><div class="cursor-dot"></div><div class="cursor-ring"></div></div>
     <div class="fx-layer" id="fx" aria-hidden="true"></div>
 
+    <!-- ——— game overlay ——— -->
+    <div class="game-ui" id="game-ui" aria-hidden="true">
+      <div class="game-hud">
+        <div class="g-score glass"><small>SCORE</small><b id="g-score">0</b></div>
+        <div class="g-mid">
+          <div class="g-time"><span id="g-time"></span></div>
+          <div class="g-combo" id="g-combo"></div>
+        </div>
+        <div class="g-lives glass" id="g-lives"></div>
+      </div>
+      <button class="g-exit" id="g-exit" data-hover aria-label="게임 나가기">✕</button>
+      <div class="g-count" id="g-count"></div>
+      <div class="g-flash" id="g-flash"></div>
+      <div class="g-tip" id="g-tip">누르고 있으면 날아올라요!</div>
+      <div class="g-over glass" id="g-over">
+        <p class="eyebrow">GAME OVER</p>
+        <p class="g-rank" id="g-rank"></p>
+        <p class="g-final"><b id="g-final">0</b><span>점</span></p>
+        <p class="g-best" id="g-best"></p>
+        <div class="g-btns">
+          <button class="pill" id="g-retry" data-hover><span>다시 하기</span></button>
+          <button class="pill ghost" id="g-leave" data-hover><span>나가기</span></button>
+        </div>
+      </div>
+    </div>
+
     <!-- ——— chrome ——— -->
     <header class="nav">
       <a class="nav-logo" href="#top" data-hover data-scroll-to="0">
@@ -43,8 +69,12 @@
         <a href="#fly" data-hover data-scroll-to="fly">비행</a>
         <a href="#cafe" data-hover data-scroll-to="cafe">카페</a>
         <a href="#friends" data-hover data-scroll-to="friends">친구들</a>
+        <a href="#play" data-hover data-scroll-to="play">게임</a>
         <a href="#night" data-hover data-scroll-to="night">밤하늘</a>
       </nav>
+      <button class="sound" id="sound" data-hover aria-pressed="false" aria-label="효과음 켜기/끄기">
+        <span class="sound-bars"><i></i><i></i><i></i><i></i></span><b>SOUND</b>
+      </button>
     </header>
     <div class="progress"><span id="progress-bar"></span></div>
     <ol class="dots" id="dots"></ol>
@@ -66,7 +96,7 @@
         </div>
         <div class="hero-hint front" id="hero-hint">
           <svg viewBox="0 0 120 60"><path d="M4 50 C 30 55, 70 50, 110 12" /><path d="M96 10 L112 10 L108 26" /></svg>
-          <span>눌러 보세요!</span>
+          <span>잡아서 던져 보세요!</span>
         </div>
       </section>
 
@@ -194,10 +224,33 @@
         </div>
       </section>
 
+      <!-- ——— PLAY ——— -->
+      <section class="play" id="play" data-stage="play">
+        <div class="col front play-copy">
+          <p class="eyebrow reveal">05 — MINI GAME</p>
+          <h2 class="title reveal">귀를 펄럭여<br /><em>시나몬롤</em>을 모아요!</h2>
+          <p class="lead reveal">
+            화면을 <b>누르고 있으면</b> 귀를 펄럭이며 날아올라요. 시나몬롤을 연속으로 먹으면 콤보 배율이 올라가고,
+            반짝이는 <b>황금 시나몬롤</b>은 5점! 심술난 번개구름은 조심하세요.
+          </p>
+          <div class="play-row reveal">
+            <button class="pill big" id="game-start" data-hover>
+              <span>게임 시작</span>
+              <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+            </button>
+            <div class="best glass"><small>BEST</small><b id="best-score">0</b></div>
+          </div>
+          <ul class="keys reveal">
+            <li><kbd>Space</kbd> 또는 <kbd>클릭</kbd> 유지 → 날기</li>
+            <li><kbd>Esc</kbd> → 나가기</li>
+          </ul>
+        </div>
+      </section>
+
       <!-- ——— NIGHT ——— -->
       <section class="night" id="night" data-stage="night">
         <div class="night-copy front">
-          <p class="eyebrow reveal">05 — GOOD NIGHT</p>
+          <p class="eyebrow reveal">06 — GOOD NIGHT</p>
           <h2 class="title big reveal" id="night-title">잘 자, 시나모롤</h2>
           <p class="lead reveal">오늘도 구름 이불 위에서 폭신하게. 화면을 눌러 별똥별을 띄워 보세요 ✦</p>
           <div class="zzz" aria-hidden="true"><span>z</span><span>z</span><span>Z</span></div>

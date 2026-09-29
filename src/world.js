@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { mergeVertices, mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Puppy, PALETTES } from './puppy.js';
 import { shared, toonMaterial, outlineMaterial } from './materials.js';
 import { makePose, blendPose } from './choreo.js';
+import { cloudGeometry, PUFFS, spiralRoll } from './props.js';
+import { Game } from './game.js';
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -16,82 +17,6 @@ const outBack = (x) => {
   return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
 };
 const rand = (a, b) => a + Math.random() * (b - a);
-
-// ————————————————————————————————— geometry helpers
-function cloudGeometry(puffs) {
-  const parts = puffs.map(([x, y, z, r]) => {
-    const g = new THREE.SphereGeometry(r, 28, 20);
-    g.translate(x, y, z);
-    return g;
-  });
-  let g = mergeGeometries(parts);
-  g.deleteAttribute('uv');
-  g.deleteAttribute('normal');
-  const p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    let y = p.getY(i);
-    if (y < -0.25) y = -0.25 + (y + 0.25) * 0.35; // flat cloud belly
-    p.setY(i, y * 0.85);
-  }
-  g = mergeVertices(g, 1e-4);
-  g.computeVertexNormals();
-  return g;
-}
-
-const PUFFS = [
-  [0, 0.1, 0, 1], [0.95, -0.1, 0.1, 0.78], [-0.95, -0.12, 0, 0.74], [0.42, 0.55, -0.1, 0.66],
-  [-0.45, 0.45, 0.12, 0.62], [1.7, -0.3, 0, 0.5], [-1.72, -0.3, 0.05, 0.46],
-];
-
-function spiralRoll() {
-  const g = new THREE.Group();
-  const dough = toonMaterial({ color: '#f5c58c', shadow: '#c27a45' });
-  const icing = toonMaterial({ color: '#ffffff', shadow: '#f1e3d6' });
-  const line = outlineMaterial({ color: '#9c5d34' });
-  const plateMat = toonMaterial({ color: '#ffffff', shadow: '#cfe1f7' });
-  const plateLine = outlineMaterial({ color: '#6ea4de' });
-
-  const pts = [];
-  const turns = 3;
-  for (let i = 0; i <= 240; i++) {
-    const t = i / 240;
-    const a = t * turns * Math.PI * 2;
-    const r = 0.22 + t * turns * 0.43;
-    pts.push(new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r));
-  }
-  const tube = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 600, 0.205, 16);
-  const roll = new THREE.Mesh(tube, dough);
-  roll.add(new THREE.Mesh(tube, line));
-  roll.scale.set(1, 1.5, 1);
-  g.add(roll);
-  const endCap = new THREE.Mesh(new THREE.SphereGeometry(0.205, 20, 14), dough);
-  endCap.position.copy(pts[pts.length - 1]).multiply(roll.scale);
-  endCap.scale.set(1, 1.5, 1);
-  endCap.add(new THREE.Mesh(endCap.geometry, line));
-  g.add(endCap);
-  const core = new THREE.Mesh(new THREE.SphereGeometry(0.22, 20, 14), dough);
-  core.scale.set(1, 1.4, 1);
-  g.add(core);
-
-  // icing drizzle zig-zagging over the top
-  const ip = [];
-  for (let i = 0; i <= 8; i++) {
-    const x = lerp(-0.95, 0.95, i / 8);
-    const zr = Math.sqrt(Math.max(0, 1.45 * 1.45 - x * x)) * 0.62;
-    ip.push(new THREE.Vector3(x, 0.34, i % 2 ? zr : -zr));
-  }
-  const iceGeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(ip, false, 'catmullrom', 0.35), 300, 0.045, 10);
-  const ice = new THREE.Mesh(iceGeo, icing);
-  ice.add(new THREE.Mesh(iceGeo, line));
-  g.add(ice);
-
-  const plateGeo = new THREE.CylinderGeometry(1.85, 1.6, 0.12, 64);
-  const plate = new THREE.Mesh(plateGeo, plateMat);
-  plate.add(new THREE.Mesh(plateGeo, plateLine));
-  plate.position.y = -0.37;
-  g.add(plate);
-  return g;
-}
 
 function starShaderPoints(count, spread, colors, sizeRange) {
   const pos = new Float32Array(count * 3);
@@ -263,6 +188,16 @@ export function createWorld(canvas) {
   let flightDrift = 0;
   const camLook = new THREE.Vector3();
 
+  // mini-game + grab-and-fling physics
+  const game = new Game(scene, camera);
+  const cPose = {};
+  const fling = {
+    off: new THREE.Vector3(), vel: new THREE.Vector3(), target: new THREE.Vector3(),
+    grab: new THREE.Vector3(), dragging: false, plane: new THREE.Plane(new THREE.Vector3(0, 0, 1), 0),
+  };
+  const tmpA = new THREE.Vector3();
+  const tmpB = new THREE.Vector3();
+
   function dampPose(dt) {
     const k = first ? 1 : 1 - Math.exp(-5.5 * dt);
     for (const key in target) {
@@ -303,6 +238,32 @@ export function createWorld(canvas) {
     return null;
   }
 
+  function rayAt(x, y) {
+    ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
+    raycaster.setFromCamera(ndc, camera);
+  }
+  function startDrag(x, y) {
+    if (game.state !== 'idle') return false;
+    rayAt(x, y);
+    fling.plane.constant = -cinna.root.position.z;
+    if (!raycaster.ray.intersectPlane(fling.plane, tmpA)) return false;
+    fling.grab.copy(tmpA).sub(cinna.root.position);
+    fling.target.copy(cinna.root.position);
+    fling.dragging = true;
+    return true;
+  }
+  function moveDrag(x, y) {
+    if (!fling.dragging) return;
+    rayAt(x, y);
+    if (raycaster.ray.intersectPlane(fling.plane, tmpA)) fling.target.copy(tmpA).sub(fling.grab);
+  }
+  function endDrag() {
+    if (!fling.dragging) return 0;
+    fling.dragging = false;
+    fling.vel.clampLength(0, 30);
+    return fling.vel.length();
+  }
+
   function update(dt, t, s) {
     const mob = aspect < 0.85;
     const rf = mob ? 0 : clamp(aspect / 1.6, 0.62, 1.05);
@@ -321,8 +282,8 @@ export function createWorld(canvas) {
     let sc = P.scale;
     if (mob) {
       // stack vertically on phones: character above the copy
-      const L = [0, 2.35, 0.6, 2.2, 0.2, 0];
-      const lift = L[s.i] * (1 - s.b) + L[Math.min(s.i + 1, 5)] * s.b;
+      const L = [0, 2.35, 0.6, 2.2, 0.2, 2.3, 0];
+      const lift = L[s.i] * (1 - s.b) + L[Math.min(s.i + 1, L.length - 1)] * s.b;
       y += lift;
       sc *= 0.62;
     }
@@ -343,10 +304,55 @@ export function createWorld(canvas) {
       const barrel = smooth(0.44, 0.6, fp);
       rz += barrel * Math.PI * 2 * env;
     }
+    // mini-game takes over the character
+    game.update(dt, t);
+    Object.assign(cPose, P);
+    cinna.root.visible = true;
+    if (game.blend > 0.001) {
+      const g = game.applyPose(cPose, t);
+      const k = game.blend;
+      x = lerp(x, g.x, k);
+      y = lerp(y, g.y, k);
+      z = lerp(z, 0, k);
+      rx = lerp(rx, g.rx, k);
+      ry = lerp(ry, g.ry, k);
+      rz = lerp(rz, g.rz, k);
+      sc = lerp(sc, g.scale, k);
+      cinna.root.visible = !g.hidden;
+    }
+
+    // grab & fling: an underdamped spring pulls him home
+    if (fling.dragging) {
+      tmpA.copy(fling.target).sub(tmpB.set(x, y, z));
+      tmpB.copy(fling.off);
+      fling.off.lerp(tmpA, 1 - Math.exp(-18 * dt));
+      if (dt > 0) fling.vel.lerp(tmpA.copy(fling.off).sub(tmpB).divideScalar(dt), 0.5);
+    } else {
+      fling.vel.addScaledVector(fling.off, -36 * dt).multiplyScalar(Math.exp(-2.6 * dt));
+      fling.off.addScaledVector(fling.vel, dt);
+    }
+    const flv = fling.vel;
+    x += fling.off.x;
+    y += fling.off.y;
+    z += fling.off.z;
+    rz += clamp(-flv.x * 0.05, -0.9, 0.9);
+    rx += clamp(-flv.y * 0.035, -0.6, 0.6);
+    ry += clamp(flv.x * 0.05, -1, 1);
+    const flail = clamp(flv.length() / 10 + (fling.dragging ? 0.35 : 0), 0, 1);
+    if (flail > 0.01) {
+      cPose.flapAmp = lerp(cPose.flapAmp, 0.75, flail);
+      cPose.flapSpeed = lerp(cPose.flapSpeed, 22, flail);
+      cPose.earL = lerp(cPose.earL, 1.6, flail);
+      cPose.earR = lerp(cPose.earR, 1.6, flail);
+      cPose.look *= 1 - flail;
+      cPose.sleep *= 1 - flail;
+      if (flail > 0.25) cPose.happy = 1;
+    }
+
     cinna.root.position.set(x, y, z);
     cinna.root.rotation.set(rx, ry, rz);
     cinna.root.scale.setScalar(sc);
-    cinna.update(dt, t, P, s.mouse);
+    cinna.update(dt, t, cPose, s.mouse);
 
     // ——— friends ———
     const fv = P.friends;
@@ -399,7 +405,7 @@ export function createWorld(canvas) {
     sparkles.material.uniforms.uLift.value = s.scroll * 1.2;
 
     // ——— clouds ———
-    flightDrift += dt * (0.3 + P.speed * 9);
+    flightDrift += dt * (0.3 + Math.max(P.speed, cPose.speed) * 9);
     clouds.visible = cloudOutline.visible = true;
     for (let i = 0; i < CLOUDS; i++) {
       const c = cloudData[i];
@@ -419,11 +425,13 @@ export function createWorld(canvas) {
     clouds.instanceMatrix.needsUpdate = true;
 
     // ——— speed lines ———
-    lineMat.opacity = P.speed * 0.75 * env;
+    const gameRush = game.state === 'play' ? game.blend : 0;
+    const rush = Math.max(P.speed * env, gameRush * 0.8);
+    lineMat.opacity = rush * 0.75;
     lines.visible = lineMat.opacity > 0.01;
     if (lines.visible) {
       lineData.forEach((l, i) => {
-        l.x -= dt * l.v * P.speed;
+        l.x -= dt * l.v * rush;
         if (l.x < -16) {
           l.x = 16;
           l.y = rand(-5, 5);
@@ -449,5 +457,5 @@ export function createWorld(canvas) {
     return P;
   }
 
-  return { update, resize, pick, cinna, friends, renderer, camera };
+  return { update, resize, pick, startDrag, moveDrag, endDrag, fling, game, cinna, friends, renderer, camera };
 }
