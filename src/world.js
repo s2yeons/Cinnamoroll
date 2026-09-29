@@ -156,10 +156,10 @@ export function createWorld(canvas) {
 
   // sparkles & stars
   const sparkles = starShaderPoints(
-    140,
-    () => [rand(-14, 14), rand(-8, 8), rand(-16, 4)],
-    ['#ffd76a', '#ff9fc9', '#8fc6ff', '#ffffff'],
-    [10, 26],
+    260,
+    () => [rand(-15, 15), rand(-9, 9), rand(-16, 4)],
+    ['#ffd76a', '#ff9fc9', '#8fc6ff', '#ffffff', '#c9b6ff', '#9ff0d8'],
+    [12, 34],
   );
   scene.add(sparkles);
   const stars = starShaderPoints(
@@ -179,6 +179,93 @@ export function createWorld(canvas) {
   const lineData = Array.from({ length: LINES }, () => ({
     x: rand(-14, 14), y: rand(-5, 5), z: rand(-8, 3), len: rand(1.5, 4.5), v: rand(22, 40),
   }));
+
+  // ——— stardust: a ring buffer of GPU points shed by the character ———
+  const DUST = 1200;
+  const dPos = new Float32Array(DUST * 3);
+  const dVel = new Float32Array(DUST * 3);
+  const dCol = new Float32Array(DUST * 3);
+  const dSize = new Float32Array(DUST);
+  const dBirth = new Float32Array(DUST).fill(-100);
+  const dLife = new Float32Array(DUST).fill(1);
+  const dustGeo = new THREE.BufferGeometry();
+  const attr = (arr, n) => new THREE.BufferAttribute(arr, n).setUsage(THREE.DynamicDrawUsage);
+  dustGeo.setAttribute('position', attr(dPos, 3));
+  dustGeo.setAttribute('aColor', attr(dCol, 3));
+  dustGeo.setAttribute('aSize', attr(dSize, 1));
+  dustGeo.setAttribute('aBirth', attr(dBirth, 1));
+  dustGeo.setAttribute('aLife', attr(dLife, 1));
+  const dustMat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    uniforms: { uTime: { value: 0 }, uPixel: { value: 1 } },
+    vertexShader: /* glsl */ `
+      attribute vec3 aColor; attribute float aSize; attribute float aBirth; attribute float aLife;
+      uniform float uTime, uPixel;
+      varying vec3 vColor; varying float vA; varying float vRot;
+      void main() {
+        float t = (uTime - aBirth) / aLife;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * mv;
+        float alive = step(0.0, t) * step(t, 1.0);
+        float tw = 0.55 + 0.45 * sin(uTime * 20.0 + aBirth * 97.0);
+        float grow = sin(min(1.0, t * 5.0) * 1.5708) * (1.0 - t * t);
+        gl_PointSize = alive * aSize * grow * (0.7 + 0.5 * tw) * uPixel * (12.0 / -mv.z);
+        vColor = aColor;
+        vA = alive * (1.0 - t) * (0.6 + 0.4 * tw);
+        vRot = aBirth * 13.0 + uTime * 2.0;
+      }`,
+    fragmentShader: /* glsl */ `
+      varying vec3 vColor; varying float vA; varying float vRot;
+      void main() {
+        vec2 uv = gl_PointCoord * 2.0 - 1.0;
+        float c = cos(vRot), s = sin(vRot);
+        uv = mat2(c, -s, s, c) * uv;
+        float star = 0.022 / (abs(uv.x * uv.y) + 0.022);
+        star *= smoothstep(1.0, 0.0, length(uv));
+        float core = smoothstep(0.4, 0.0, length(uv));
+        vec3 col = mix(vColor, vec3(1.0), core * 0.8);
+        float a = clamp(star * 0.9 + core, 0.0, 1.0) * vA;
+        if (a < 0.01) discard;
+        gl_FragColor = vec4(col, a);
+        #include <colorspace_fragment>
+      }`,
+  });
+  const dust = new THREE.Points(dustGeo, dustMat);
+  dust.frustumCulled = false;
+  scene.add(dust);
+  const DUST_COLORS = ['#fff3a6', '#ffc4e1', '#bfe4ff', '#d8c8ff', '#ffffff', '#b9f3e4', '#ffd76a'].map((c) => new THREE.Color(c));
+  let dHead = 0;
+  let dustClock = 0;
+  let dustDirty = false;
+  function emitDust(x, y, z, o = {}) {
+    const i = dHead;
+    dHead = (dHead + 1) % DUST;
+    const sp = o.spread ?? 0.1;
+    dPos[i * 3] = x + (Math.random() - 0.5) * sp;
+    dPos[i * 3 + 1] = y + (Math.random() - 0.5) * sp;
+    dPos[i * 3 + 2] = z + (Math.random() - 0.5) * sp;
+    const v = o.speed ?? 0.5;
+    const a = Math.random() * Math.PI * 2;
+    const b = Math.random() * Math.PI - Math.PI / 2;
+    dVel[i * 3] = Math.cos(a) * Math.cos(b) * v + (o.vx || 0);
+    dVel[i * 3 + 1] = Math.sin(b) * v + (o.vy || 0);
+    dVel[i * 3 + 2] = Math.sin(a) * Math.cos(b) * v * 0.5;
+    const c = DUST_COLORS[(Math.random() * DUST_COLORS.length) | 0];
+    dCol[i * 3] = c.r;
+    dCol[i * 3 + 1] = c.g;
+    dCol[i * 3 + 2] = c.b;
+    dSize[i] = rand(...(o.size || [9, 20]));
+    dBirth[i] = dustClock;
+    dLife[i] = rand(...(o.life || [0.8, 1.6]));
+    dustDirty = true;
+  }
+  function dustBurst(x, y, z = 0, n = 30, o = {}) {
+    for (let k = 0; k < n; k++) emitDust(x, y, z, { spread: 0.3, speed: 2.4, size: [12, 26], life: [0.7, 1.4], ...o });
+  }
+  const lastCinna = new THREE.Vector3();
+  const tailW = new THREE.Vector3();
+  let dustAcc = 0;
 
   // ——— state ———
   const pose = makePose();
@@ -223,6 +310,7 @@ export function createWorld(canvas) {
     shared.uOutline.value = 1.25 * dpr * clamp(h / 900, 0.75, 1.25);
     sparkles.material.uniforms.uPixel.value = dpr;
     stars.material.uniforms.uPixel.value = dpr;
+    dustMat.uniforms.uPixel.value = dpr;
   }
   resize();
 
@@ -354,6 +442,50 @@ export function createWorld(canvas) {
     cinna.root.scale.setScalar(sc);
     cinna.update(dt, t, cPose, s.mouse);
 
+    // ——— stardust shed from tail & ear tips; faster motion = richer trail ———
+    dustClock = t;
+    dustMat.uniforms.uTime.value = t;
+    cinna.root.updateWorldMatrix(true, true);
+    const moveSpeed = dt > 0 ? lastCinna.distanceTo(cinna.root.position) / dt : 0;
+    const vx = dt > 0 ? (cinna.root.position.x - lastCinna.x) / dt : 0;
+    const vy = dt > 0 ? (cinna.root.position.y - lastCinna.y) / dt : 0;
+    lastCinna.copy(cinna.root.position);
+    const flying = game.state === 'play' ? (game.holding ? 1 : 0.5) : 0;
+    const rate = cinna.root.visible
+      ? (5 + clamp(moveSpeed / 3, 0, 1) * 110 + flying * 50 + P.speed * 40) * (1 - P.sleep * 0.85)
+      : 0;
+    dustAcc = Math.min(dustAcc + rate * dt, 30);
+    while (dustAcc >= 1) {
+      dustAcc -= 1;
+      const r = Math.random();
+      if (r < 0.45) cinna.tail.getWorldPosition(tailW);
+      else {
+        const ear = cinna.ears[r < 0.72 ? 0 : 1].pivot;
+        tailW.set(0, -cinna.pal.earLength * rand(0.6, 0.95), 0);
+        ear.localToWorld(tailW);
+      }
+      emitDust(tailW.x, tailW.y, tailW.z, {
+        spread: 0.12 * sc + 0.05, speed: 0.35, vx: -vx * 0.15, vy: -vy * 0.15 - 0.1,
+        size: moveSpeed > 1 ? [12, 24] : [8, 16],
+      });
+    }
+    // integrate living dust
+    for (let i = 0; i < DUST; i++) {
+      if (t - dBirth[i] > dLife[i]) continue;
+      const k = Math.exp(-1.6 * dt);
+      dVel[i * 3] *= k;
+      dVel[i * 3 + 1] = dVel[i * 3 + 1] * k - 0.35 * dt;
+      dVel[i * 3 + 2] *= k;
+      dPos[i * 3] += dVel[i * 3] * dt;
+      dPos[i * 3 + 1] += dVel[i * 3 + 1] * dt;
+      dPos[i * 3 + 2] += dVel[i * 3 + 2] * dt;
+    }
+    dustGeo.attributes.position.needsUpdate = true;
+    if (dustDirty) {
+      dustDirty = false;
+      ['aColor', 'aSize', 'aBirth', 'aLife'].forEach((n) => (dustGeo.attributes[n].needsUpdate = true));
+    }
+
     // ——— friends ———
     const fv = P.friends;
     friends.forEach((f, i) => {
@@ -457,5 +589,5 @@ export function createWorld(canvas) {
     return P;
   }
 
-  return { update, resize, pick, startDrag, moveDrag, endDrag, fling, game, cinna, friends, renderer, camera };
+  return { update, resize, pick, dustBurst, startDrag, moveDrag, endDrag, fling, game, cinna, friends, renderer, camera };
 }

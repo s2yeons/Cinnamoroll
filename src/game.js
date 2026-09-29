@@ -245,7 +245,7 @@ export class Game {
           const pts = (it.type === 'gold' ? 5 : 1) * this.mult;
           this.score += pts;
           it.hit = 0.4;
-          this.emit('collect', { pts, gold: it.type === 'gold', combo: this.combo, mult: this.mult, at: this.toScreen(it.x, it.y + bob) });
+          this.emit('collect', { pts, gold: it.type === 'gold', combo: this.combo, mult: this.mult, at: this.toScreen(it.x, it.y + bob), wx: it.x, wy: it.y + bob });
         }
         continue;
       }

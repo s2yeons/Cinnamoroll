@@ -5,6 +5,7 @@ import { createWorld } from './world.js';
 import { STAGE_NAMES } from './choreo.js';
 import { GAME_TIME } from './game.js';
 import { sfx } from './sfx.js';
+import { createSparkles } from './sparkle.js';
 import './style.css';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -22,6 +23,7 @@ window.scrollTo(0, 0);
 // ————————————————————————————————— 3D world
 const world = createWorld($('#gl'));
 const cinna = world.cinna;
+const glitter = createSparkles($('#glitter'));
 if (import.meta.env.DEV) window.__world = world;
 cinna.react.pop = 0;
 
@@ -62,7 +64,23 @@ const ring = $('.cursor-ring');
 const ringPos = { x: mouse.px, y: mouse.py };
 let hoverUI = false;
 let hoverChar = false;
+let lastPT = { x: 0, y: 0, t: 0 };
 addEventListener('pointermove', (e) => {
+  const now = performance.now();
+  const dtp = Math.max(8, now - lastPT.t) / 1000;
+  const vx = (e.clientX - lastPT.x) / dtp;
+  const vy = (e.clientY - lastPT.y) / dtp;
+  lastPT = { x: e.clientX, y: e.clientY, t: now };
+  if (!document.body.classList.contains('is-loading')) glitter.trail(e.clientX, e.clientY, vx, vy);
+  const g = e.target.closest?.('.glass');
+  if (g) {
+    const r = g.getBoundingClientRect();
+    const mx = ((e.clientX - r.left) / r.width) * 100;
+    const my = ((e.clientY - r.top) / r.height) * 100;
+    g.style.setProperty('--mx', `${mx}%`);
+    g.style.setProperty('--my', `${my}%`);
+    g.style.setProperty('--fa', `${mx * 3.6}deg`);
+  }
   mouse.px = e.clientX;
   mouse.py = e.clientY;
   mouse.x = (e.clientX / innerWidth) * 2 - 1;
@@ -79,6 +97,7 @@ const HEART = '<svg viewBox="0 0 24 24" width="100%" height="100%"><path d="M12 
 const STAR = '<svg viewBox="0 0 24 24" width="100%" height="100%"><path d="M12 1.5l2.6 7.2 7.6.3-6 4.7 2.1 7.3L12 16.8 5.7 21l2.1-7.3-6-4.7 7.6-.3z" fill="currentColor" stroke="#6ea4de" stroke-width="1.4" stroke-linejoin="round"/></svg>';
 const CLOUD = '<svg viewBox="0 0 32 22" width="100%" height="100%"><path d="M8 20a6 6 0 0 1-.6-12A8 8 0 0 1 23 6.5 6.8 6.8 0 1 1 25 20z" fill="#fff" stroke="#6ea4de" stroke-width="2"/></svg>';
 function burst(x, y, n = 10, big = false) {
+  glitter.burst(x, y, Math.round(n * (big ? 3 : 2.2)), { speed: big ? 520 : 300, size: big ? 24 : 17, gravity: 140 });
   const colors = ['#f7a9c0', '#ffd76a', '#9cc9ff', '#ffffff'];
   for (let k = 0; k < n; k++) {
     const p = document.createElement('div');
@@ -214,6 +233,7 @@ function releaseDrag(e) {
       sfx.play('whoosh');
       setTimeout(() => sfx.play('boing'), 260);
       burst(e.clientX, e.clientY, Math.min(20, 6 + Math.round(speed)), true);
+      world.dustBurst(cinna.root.position.x, cinna.root.position.y, cinna.root.position.z, 40, { speed: 3 });
     }
   }
   setTimeout(() => (cinna.react.happy = 0), 1400);
@@ -232,6 +252,7 @@ addEventListener('click', (e) => {
   if (hit?.who === 'cinna') {
     reactCinna();
     burst(e.clientX, e.clientY, 16, true);
+    world.dustBurst(cinna.root.position.x, cinna.root.position.y + 0.3, cinna.root.position.z, 50, { speed: 3.2 });
     hideHint();
     return;
   }
@@ -246,6 +267,7 @@ addEventListener('click', (e) => {
     shootingStar();
     setTimeout(shootingStar, 180);
     sfx.play('twinkle');
+    glitter.rain(40);
   }
 });
 
@@ -288,10 +310,13 @@ const pctAnim = animate(loadState, {
 // hero title → chars
 const heroTitle = splitText('#hero-title', { chars: true });
 const heroChars = heroTitle.chars;
-heroChars.forEach((c) => {
+heroChars.forEach((c, i) => {
   c.classList.add('char');
+  c.style.setProperty('--i', i);
   c.style.opacity = 0;
   c.addEventListener('pointerenter', () => {
+    const r = c.getBoundingClientRect();
+    glitter.burst(r.left + r.width / 2, r.top + r.height * 0.3, 14, { speed: 260, size: 16 });
     animate(c, {
       y: [{ to: '-0.22em', duration: 220, ease: 'outQuad' }, { to: 0, duration: 900, ease: 'outElastic(1, .3)' }],
       rotate: [{ to: utils.random(-14, 14), duration: 220 }, { to: 0, duration: 900, ease: 'outElastic(1, .3)' }],
@@ -326,6 +351,11 @@ Promise.all([document.fonts.ready, new Promise((r) => setTimeout(r, 1750))]).the
       ease: 'outElastic(1, .55)',
     }, '-=650')
     .add(cinna.react, { pop: [0, 1], duration: 1500, ease: 'outElastic(1, .45)' }, '<<+=150')
+    .call(() => {
+      glitter.burst(innerWidth / 2, innerHeight * 0.45, 90, { speed: 900, size: 26, gravity: 120, life: 1.4 });
+      world.dustBurst(0, 0.2, 0, 80, { speed: 3.5 });
+      glitter.rain(50);
+    }, '<<')
     .add(cinna.react, { spin: [-Math.PI * 2, 0], duration: 1300, ease: 'outExpo' }, '<<')
     .add('.hero-meta span', { opacity: 1, y: 0, duration: 900, delay: stagger(120) }, '<<+=300')
     .add('#hero-sub', { opacity: 1, y: 0, duration: 1000 }, '<<+=100')
@@ -567,11 +597,13 @@ function leaveGame() {
 }
 
 game
-  .on('collect', ({ pts, gold, combo, mult, at }) => {
+  .on('collect', ({ pts, gold, combo, mult, at, wx, wy }) => {
     gScore.textContent = game.score;
     animate(gScore, { scale: [1.35, 1], duration: 500, ease: 'outElastic(1, .5)' });
     popText(gold ? `+${pts} ✦` : `+${pts}`, at, gold);
     burst(at.x, at.y, gold ? 16 : 6, gold);
+    world.dustBurst(wx, wy, 0, gold ? 90 : 26, gold ? { speed: 4 } : {});
+    if (gold) glitter.rain(120);
     sfx.play(gold ? 'gold' : 'chime', combo);
     if (mult > 1) {
       gCombo.textContent = `x${mult} COMBO · ${combo}`;
@@ -612,6 +644,7 @@ game
       .call(() => {
         sfx.play(isBest ? 'fanfare' : 'pop');
         if (isBest) {
+          glitter.rain(220);
           const r = gOver.getBoundingClientRect();
           for (let k = 0; k < 4; k++) setTimeout(() => burst(r.left + utils.random(0, r.width), r.top + utils.random(0, r.height * 0.5), 14, true), k * 160);
         }
@@ -671,6 +704,8 @@ function loop(now) {
   // sky
   root.setProperty('--sky-top', `#${pose.skyTop.getHexString()}`);
   root.setProperty('--sky-bot', `#${pose.skyBot.getHexString()}`);
+  root.setProperty('--rays', (1 - pose.stars).toFixed(3));
+  glitter.update(dt);
 
   // stage-dependent chrome
   const cur = st.b > 0.5 ? st.i + 1 : st.i;
